@@ -43,13 +43,13 @@ type process struct {
 	proc *pb.Process
 }
 
-type mockServer struct {
+type MockServer struct {
 	pod *pod
 }
 
 // NewMockServer creates a new gRPC server
 func NewMockServer() *grpc.Server {
-	mock := &mockServer{}
+	mock := &MockServer{}
 	serv := grpc.NewServer()
 	pb.RegisterAgentServiceServer(serv, mock)
 	pb.RegisterHealthServer(serv, mock)
@@ -64,7 +64,7 @@ func validateOCISpec(spec *pb.Spec) error {
 	return nil
 }
 
-func (m *mockServer) checkExist(containerID, execID string, createContainer, checkProcess bool) error {
+func (m *MockServer) checkExist(containerID, execID string, createContainer, checkProcess bool) error {
 	if m.pod == nil {
 		return status.Error(codes.NotFound, "pod not created")
 	}
@@ -96,37 +96,37 @@ func (m *mockServer) checkExist(containerID, execID string, createContainer, che
 	return nil
 }
 
-func (m *mockServer) processExist(containerID string, execID string) error {
+func (m *MockServer) processExist(containerID string, execID string) error {
 	return m.checkExist(containerID, execID, false, true)
 }
 
-func (m *mockServer) containerExist(containerID string) error {
+func (m *MockServer) containerExist(containerID string) error {
 	return m.checkExist(containerID, "0", false, false)
 }
 
-func (m *mockServer) containerNonExist(containerID string) error {
+func (m *MockServer) containerNonExist(containerID string) error {
 	return m.checkExist(containerID, "0", true, false)
 }
 
-func (m *mockServer) podExist() error {
+func (m *MockServer) podExist() error {
 	if m.pod == nil {
 		return status.Error(codes.NotFound, "pod not created")
 	}
 	return nil
 }
 
-func (m *mockServer) Check(ctx context.Context, req *pb.CheckRequest) (*pb.HealthCheckResponse, error) {
+func (m *MockServer) Check(ctx context.Context, req *pb.CheckRequest) (*pb.HealthCheckResponse, error) {
 	return &pb.HealthCheckResponse{Status: pb.HealthCheckResponse_SERVING}, nil
 }
 
-func (m *mockServer) Version(ctx context.Context, req *pb.CheckRequest) (*pb.VersionCheckResponse, error) {
+func (m *MockServer) Version(ctx context.Context, req *pb.CheckRequest) (*pb.VersionCheckResponse, error) {
 	return &pb.VersionCheckResponse{
 		GrpcVersion:  pb.APIVersion,
 		AgentVersion: MockServerVersion,
 	}, nil
 }
 
-func (m *mockServer) CreateContainer(ctx context.Context, req *pb.CreateContainerRequest) (*types.Empty, error) {
+func (m *MockServer) CreateContainer(ctx context.Context, req *pb.CreateContainerRequest) (*types.Empty, error) {
 	mockLock.Lock()
 	defer mockLock.Unlock()
 	if err := m.containerNonExist(req.ContainerId); err != nil {
@@ -151,7 +151,7 @@ func (m *mockServer) CreateContainer(ctx context.Context, req *pb.CreateContaine
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) StartContainer(ctx context.Context, req *pb.StartContainerRequest) (*types.Empty, error) {
+func (m *MockServer) StartContainer(ctx context.Context, req *pb.StartContainerRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.containerExist(req.ContainerId); err != nil {
@@ -161,7 +161,7 @@ func (m *mockServer) StartContainer(ctx context.Context, req *pb.StartContainerR
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) RemoveContainer(ctx context.Context, req *pb.RemoveContainerRequest) (*types.Empty, error) {
+func (m *MockServer) RemoveContainer(ctx context.Context, req *pb.RemoveContainerRequest) (*types.Empty, error) {
 	mockLock.Lock()
 	defer mockLock.Unlock()
 	if err := m.containerExist(req.ContainerId); err != nil {
@@ -171,7 +171,7 @@ func (m *mockServer) RemoveContainer(ctx context.Context, req *pb.RemoveContaine
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) ExecProcess(ctx context.Context, req *pb.ExecProcessRequest) (*types.Empty, error) {
+func (m *MockServer) ExecProcess(ctx context.Context, req *pb.ExecProcessRequest) (*types.Empty, error) {
 	mockLock.Lock()
 	defer mockLock.Unlock()
 	if err := m.containerExist(req.ContainerId); err != nil {
@@ -186,7 +186,7 @@ func (m *mockServer) ExecProcess(ctx context.Context, req *pb.ExecProcessRequest
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) SignalProcess(ctx context.Context, req *pb.SignalProcessRequest) (*types.Empty, error) {
+func (m *MockServer) SignalProcess(ctx context.Context, req *pb.SignalProcessRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.processExist(req.ContainerId, req.ExecId); err != nil {
@@ -196,7 +196,7 @@ func (m *mockServer) SignalProcess(ctx context.Context, req *pb.SignalProcessReq
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest) (*pb.WaitProcessResponse, error) {
+func (m *MockServer) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest) (*pb.WaitProcessResponse, error) {
 	mockLock.Lock()
 	defer mockLock.Unlock()
 	if err := m.processExist(req.ContainerId, req.ExecId); err != nil {
@@ -214,7 +214,7 @@ func (m *mockServer) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest
 	return &pb.WaitProcessResponse{Status: 0}, nil
 }
 
-func (m *mockServer) WriteStdin(ctx context.Context, req *pb.WriteStreamRequest) (*pb.WriteStreamResponse, error) {
+func (m *MockServer) WriteStdin(ctx context.Context, req *pb.WriteStreamRequest) (*pb.WriteStreamResponse, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.processExist(req.ContainerId, req.ExecId); err != nil {
@@ -224,7 +224,7 @@ func (m *mockServer) WriteStdin(ctx context.Context, req *pb.WriteStreamRequest)
 	return &pb.WriteStreamResponse{Len: uint32(len(req.Data))}, nil
 }
 
-func (m *mockServer) ReadStdout(ctx context.Context, req *pb.ReadStreamRequest) (*pb.ReadStreamResponse, error) {
+func (m *MockServer) ReadStdout(ctx context.Context, req *pb.ReadStreamRequest) (*pb.ReadStreamResponse, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.processExist(req.ContainerId, req.ExecId); err != nil {
@@ -234,7 +234,7 @@ func (m *mockServer) ReadStdout(ctx context.Context, req *pb.ReadStreamRequest) 
 	return &pb.ReadStreamResponse{}, nil
 }
 
-func (m *mockServer) ReadStderr(ctx context.Context, req *pb.ReadStreamRequest) (*pb.ReadStreamResponse, error) {
+func (m *MockServer) ReadStderr(ctx context.Context, req *pb.ReadStreamRequest) (*pb.ReadStreamResponse, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.processExist(req.ContainerId, req.ExecId); err != nil {
@@ -244,7 +244,7 @@ func (m *mockServer) ReadStderr(ctx context.Context, req *pb.ReadStreamRequest) 
 	return &pb.ReadStreamResponse{}, nil
 }
 
-func (m *mockServer) CloseStdin(ctx context.Context, req *pb.CloseStdinRequest) (*types.Empty, error) {
+func (m *MockServer) CloseStdin(ctx context.Context, req *pb.CloseStdinRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.processExist(req.ContainerId, req.ExecId); err != nil {
@@ -254,7 +254,7 @@ func (m *mockServer) CloseStdin(ctx context.Context, req *pb.CloseStdinRequest) 
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) TtyWinResize(ctx context.Context, req *pb.TtyWinResizeRequest) (*types.Empty, error) {
+func (m *MockServer) TtyWinResize(ctx context.Context, req *pb.TtyWinResizeRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.processExist(req.ContainerId, req.ExecId); err != nil {
@@ -264,7 +264,7 @@ func (m *mockServer) TtyWinResize(ctx context.Context, req *pb.TtyWinResizeReque
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequest) (*types.Empty, error) {
+func (m *MockServer) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequest) (*types.Empty, error) {
 	mockLock.Lock()
 	defer mockLock.Unlock()
 	if m.pod != nil {
@@ -276,7 +276,7 @@ func (m *mockServer) CreateSandbox(ctx context.Context, req *pb.CreateSandboxReq
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRequest) (*types.Empty, error) {
+func (m *MockServer) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRequest) (*types.Empty, error) {
 	mockLock.Lock()
 	defer mockLock.Unlock()
 	if err := m.podExist(); err != nil {
@@ -287,7 +287,7 @@ func (m *mockServer) DestroySandbox(ctx context.Context, req *pb.DestroySandboxR
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) AddInterface(context.Context, *pb.AddInterfaceRequest) (*pbTypes.Interface, error) {
+func (m *MockServer) AddInterface(context.Context, *pb.AddInterfaceRequest) (*pbTypes.Interface, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -297,7 +297,7 @@ func (m *mockServer) AddInterface(context.Context, *pb.AddInterfaceRequest) (*pb
 	return nil, nil
 }
 
-func (m *mockServer) RemoveInterface(context.Context, *pb.RemoveInterfaceRequest) (*pbTypes.Interface, error) {
+func (m *MockServer) RemoveInterface(context.Context, *pb.RemoveInterfaceRequest) (*pbTypes.Interface, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -307,7 +307,7 @@ func (m *mockServer) RemoveInterface(context.Context, *pb.RemoveInterfaceRequest
 	return nil, nil
 }
 
-func (m *mockServer) UpdateInterface(ctx context.Context, req *pb.UpdateInterfaceRequest) (*pbTypes.Interface, error) {
+func (m *MockServer) UpdateInterface(ctx context.Context, req *pb.UpdateInterfaceRequest) (*pbTypes.Interface, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -317,7 +317,7 @@ func (m *mockServer) UpdateInterface(ctx context.Context, req *pb.UpdateInterfac
 	return nil, nil
 }
 
-func (m *mockServer) UpdateRoutes(ctx context.Context, req *pb.UpdateRoutesRequest) (*pb.Routes, error) {
+func (m *MockServer) UpdateRoutes(ctx context.Context, req *pb.UpdateRoutesRequest) (*pb.Routes, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -327,7 +327,7 @@ func (m *mockServer) UpdateRoutes(ctx context.Context, req *pb.UpdateRoutesReque
 	return nil, nil
 }
 
-func (m *mockServer) OnlineCPUMem(ctx context.Context, req *pb.OnlineCPUMemRequest) (*types.Empty, error) {
+func (m *MockServer) OnlineCPUMem(ctx context.Context, req *pb.OnlineCPUMemRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -337,7 +337,7 @@ func (m *mockServer) OnlineCPUMem(ctx context.Context, req *pb.OnlineCPUMemReque
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) ListProcesses(ctx context.Context, req *pb.ListProcessesRequest) (*pb.ListProcessesResponse, error) {
+func (m *MockServer) ListProcesses(ctx context.Context, req *pb.ListProcessesRequest) (*pb.ListProcessesResponse, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -347,7 +347,7 @@ func (m *mockServer) ListProcesses(ctx context.Context, req *pb.ListProcessesReq
 	return &pb.ListProcessesResponse{}, nil
 }
 
-func (m *mockServer) UpdateContainer(ctx context.Context, req *pb.UpdateContainerRequest) (*types.Empty, error) {
+func (m *MockServer) UpdateContainer(ctx context.Context, req *pb.UpdateContainerRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -356,7 +356,7 @@ func (m *mockServer) UpdateContainer(ctx context.Context, req *pb.UpdateContaine
 
 	return &types.Empty{}, nil
 }
-func (m *mockServer) StatsContainer(ctx context.Context, req *pb.StatsContainerRequest) (*pb.StatsContainerResponse, error) {
+func (m *MockServer) StatsContainer(ctx context.Context, req *pb.StatsContainerRequest) (*pb.StatsContainerResponse, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -367,7 +367,7 @@ func (m *mockServer) StatsContainer(ctx context.Context, req *pb.StatsContainerR
 
 }
 
-func (m *mockServer) PauseContainer(ctx context.Context, req *pb.PauseContainerRequest) (*types.Empty, error) {
+func (m *MockServer) PauseContainer(ctx context.Context, req *pb.PauseContainerRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -377,7 +377,7 @@ func (m *mockServer) PauseContainer(ctx context.Context, req *pb.PauseContainerR
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) ResumeContainer(ctx context.Context, req *pb.ResumeContainerRequest) (*types.Empty, error) {
+func (m *MockServer) ResumeContainer(ctx context.Context, req *pb.ResumeContainerRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -387,11 +387,11 @@ func (m *mockServer) ResumeContainer(ctx context.Context, req *pb.ResumeContaine
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) ReseedRandomDev(ctx context.Context, req *pb.ReseedRandomDevRequest) (*types.Empty, error) {
+func (m *MockServer) ReseedRandomDev(ctx context.Context, req *pb.ReseedRandomDevRequest) (*types.Empty, error) {
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) ListInterfaces(ctx context.Context, req *pb.ListInterfacesRequest) (*pb.Interfaces, error) {
+func (m *MockServer) ListInterfaces(ctx context.Context, req *pb.ListInterfacesRequest) (*pb.Interfaces, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -401,7 +401,7 @@ func (m *mockServer) ListInterfaces(ctx context.Context, req *pb.ListInterfacesR
 	return nil, nil
 }
 
-func (m *mockServer) ListRoutes(ctx context.Context, req *pb.ListRoutesRequest) (*pb.Routes, error) {
+func (m *MockServer) ListRoutes(ctx context.Context, req *pb.ListRoutesRequest) (*pb.Routes, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -411,7 +411,7 @@ func (m *mockServer) ListRoutes(ctx context.Context, req *pb.ListRoutesRequest) 
 	return nil, nil
 }
 
-func (m *mockServer) GetGuestDetails(ctx context.Context, req *pb.GuestDetailsRequest) (*pb.GuestDetailsResponse, error) {
+func (m *MockServer) GetGuestDetails(ctx context.Context, req *pb.GuestDetailsRequest) (*pb.GuestDetailsResponse, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	if err := m.podExist(); err != nil {
@@ -421,11 +421,11 @@ func (m *mockServer) GetGuestDetails(ctx context.Context, req *pb.GuestDetailsRe
 	return nil, nil
 }
 
-func (m *mockServer) SetGuestDateTime(ctx context.Context, req *pb.SetGuestDateTimeRequest) (*types.Empty, error) {
+func (m *MockServer) SetGuestDateTime(ctx context.Context, req *pb.SetGuestDateTimeRequest) (*types.Empty, error) {
 	return &types.Empty{}, nil
 }
 
-func (m *mockServer) CopyFile(ctx context.Context, req *pb.CopyFileRequest) (*types.Empty, error) {
+func (m *MockServer) CopyFile(ctx context.Context, req *pb.CopyFileRequest) (*types.Empty, error) {
 	mockLock.RLock()
 	defer mockLock.RUnlock()
 	return nil, m.podExist()

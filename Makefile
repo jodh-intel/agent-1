@@ -4,7 +4,12 @@
 #
 
 TARGET = kata-agent
-SOURCES := $(shell find . 2>&1 | grep -E '.*\.go$$')
+CLI_DIR = cli
+
+SOURCES := $(shell find . 2>&1 | grep -v "$(CLI_DIR)" | grep -E '.*\.go$$')
+
+CLI_TARGET = $(CLI_DIR)/kata-agent-ctl
+CLI_SOURCES = $(wildcard $(CLI_DIR)/*.go)
 
 DESTDIR :=
 PREFIX := /usr
@@ -46,9 +51,15 @@ BUILDARGS += $(if $(ARCH), --build-arg arch=$(ARCH))
 AGENT_IMAGE := katacontainers/agent-dev
 AGENT_TAG := $(if $(COMMIT_NO_SHORT),$(COMMIT_NO_SHORT),dev)
 
+default: $(TARGET) $(CLI_TARGET)
+
 $(TARGET): $(GENERATED_FILES) $(SOURCES) $(VERSION_FILE)
 	go build $(BUILDFLAGS) -tags "$(BUILDTAGS)" -o $@ \
 		-ldflags "-X main.version=$(VERSION_COMMIT) -X main.seccompSupport=$(SECCOMP)"
+
+$(CLI_TARGET): $(GENERATED_FILES) $(CLI_SOURCES) $(VERSION_FILE)
+	go build $(BUILDFLAGS) -tags "$(BUILDTAGS)" -o $@ \
+		-ldflags "-X main.version=$(VERSION_COMMIT)" $(CLI_SOURCES)
 
 install:
 	install -D $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
@@ -66,7 +77,7 @@ proto: build-image
 
 .PHONY: clean test
 clean:
-	rm -f $(TARGET) $(GENERATED_FILES)
+	rm -f $(TARGET) $(CLI_TARGET) $(GENERATED_FILES)
 
 test:
 	bash .ci/go-test.sh

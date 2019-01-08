@@ -99,16 +99,21 @@ type sandboxStorage struct {
 type sandbox struct {
 	sync.RWMutex
 
-	id                string
-	hostname          string
-	containers        map[string]*container
-	channel           channel
-	network           network
-	wg                sync.WaitGroup
-	sharedPidNs       namespace
-	mounts            []string
-	subreaper         reaper
-	server            *grpc.Server
+	id          string
+	hostname    string
+	containers  map[string]*container
+	channel     channel
+	network     network
+	wg          sync.WaitGroup
+	sharedPidNs namespace
+	mounts      []string
+	subreaper   reaper
+	server      *grpc.Server
+
+	// Set when server needs to be shut down
+	shutdown chan bool
+	dead     bool
+
 	pciDeviceMap      map[string]string
 	deviceWatchers    map[string](chan string)
 	sharedUTSNs       namespace
@@ -137,6 +142,9 @@ var debug = false
 
 // if true, coredump when an internal error occurs or a fatal signal is received
 var crashOnError = false
+
+// if true, enable developer mode which uses a NOP server implementation
+var devMode bool
 
 // This is the list of file descriptors we can properly close after the process
 // has been started. When the new process is exec(), those file descriptors are
@@ -241,6 +249,16 @@ func (s *sandbox) setSandboxStorage(path string) bool {
 	sbs := s.storages[path]
 	sbs.refCount++
 	return false
+}
+
+// waitForServerStopRequest blocks, waiting for the gRPC server itself to request
+// that it be shut down.
+func (s *sandbox) waitForServerStopRequest() {
+	agentLog.Infof("DEBUG: waitForServerStopRequest:")
+
+	// Wait for the server to report completion.
+	<-s.shutdown
+	s.dead = true
 }
 
 // scanGuestHooks will search the given guestHookPath
@@ -443,6 +461,10 @@ func (s *sandbox) readStdio(cid, execID string, length int, stdout bool) ([]byte
 }
 
 func (s *sandbox) setupSharedNamespaces() error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+
 	// Set up shared IPC namespace
 	ns, err := setupPersistentNs(nsTypeIPC)
 	if err != nil {
@@ -752,8 +774,10 @@ func (s *sandbox) initLogger() error {
 	return announce()
 }
 
-func (s *sandbox) initChannel() error {
-	c, err := newChannel()
+func (s *sandbox) initChannel(serialPath string) error {
+	c, err := newChannel(serialPath)
+	agentLog.Infof("DEBUG: initChannel: c: %+v, err: %v", c, err)
+
 	if err != nil {
 		return err
 	}
@@ -787,12 +811,31 @@ func grpcTracer(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo
 }
 
 func (s *sandbox) startGRPC() {
-	grpcImpl := &agentGRPC{
+	var grpcImpl pb.AgentServiceServer
+	var healthImpl pb.HealthServer
+
+	stdGRPCImpl := &agentGRPC{
 		sandbox: s,
 		version: version,
 	}
 
+	nopGRPCImpl := &nopAgentGRPC{
+		sandbox: s,
+		version: version,
+	}
+
+	if devMode {
+		agentLog.Infof("FIXME: using &nopAgentGRPC")
+
+		grpcImpl = nopGRPCImpl
+		healthImpl = nopGRPCImpl
+	} else {
+		grpcImpl = stdGRPCImpl
+		healthImpl = stdGRPCImpl
+	}
+
 	var grpcServer *grpc.Server
+
 	if s.enableGrpcTrace {
 		agentLog.Info("Enable grpc tracing")
 		opt := grpc.UnaryInterceptor(grpcTracer)
@@ -802,7 +845,8 @@ func (s *sandbox) startGRPC() {
 	}
 
 	pb.RegisterAgentServiceServer(grpcServer, grpcImpl)
-	pb.RegisterHealthServer(grpcServer, grpcImpl)
+	pb.RegisterHealthServer(grpcServer, healthImpl)
+
 	s.server = grpcServer
 
 	s.wg.Add(1)
@@ -819,28 +863,45 @@ func (s *sandbox) startGRPC() {
 				return
 			}
 
+			agentLog.Infof("FIXME: startGRPC: calling s.channel.wait()")
 			err = s.channel.wait()
+			agentLog.Infof("FIXME: startGRPC: s.channel.wait() err: %v", err)
+
 			if err != nil {
 				agentLog.WithError(err).Warn("Failed to wait agent grpc channel ready")
 				return
 			}
 
 			var l net.Listener
+
+			agentLog.Infof("FIXME: startGRPC: calling s.channel.listen()")
 			l, err = s.channel.listen()
+			agentLog.Infof("FIXME: startGRPC: s.channel.listen() err: %v", err)
+
 			if err != nil {
 				agentLog.WithError(err).Warn("Failed to create agent grpc listener")
 				return
 			}
 
 			// l is closed when Serve() returns
+			agentLog.Infof("FIXME: startGRPC: calling grpcServer.Serve()")
 			err = grpcServer.Serve(l)
+			agentLog.Infof("FIXME: startGRPC: grpcServer.Serve() err: %v", err)
+
 			if err != nil {
 				agentLog.WithError(err).Warn("agent grpc server quits")
 			}
 
+			agentLog.Infof("FIXME: startGRPC: calling s.channel.teardown()")
 			err = s.channel.teardown()
+			agentLog.Infof("FIXME: startGRPC: s.channel.teardown() err: %v", err)
+
 			if err != nil {
 				agentLog.WithError(err).Warn("agent grpc channel teardown failed")
+			}
+
+			if s.dead {
+				break
 			}
 		}
 	}()
@@ -851,6 +912,23 @@ func (s *sandbox) stopGRPC() {
 		s.server.Stop()
 		s.server = nil
 	}
+}
+
+func (s *sandbox) gracefulStopGRPC() {
+	agentLog.Infof("DEBUG: gracefulStopGRPC:")
+
+	agentLog.Infof("DEBUG: gracefulStopGRPC: s.server: %v", s.server)
+	if s.server == nil {
+		return
+	}
+
+	agentLog.Infof("DEBUG: gracefulStopGRPC: calling s.server.GracefulStop")
+	// FIXME:
+	////s.server.GracefulStop(agentLog)
+	s.server.GracefulStop()
+	agentLog.Infof("DEBUG: gracefulStopGRPC: called s.server.GracefulStop")
+
+	s.server = nil
 }
 
 type initMount struct {
@@ -979,8 +1057,17 @@ func init() {
 func realMain() {
 	var err error
 	var showVersion bool
+	var grpcTrace bool
+	var noUdev bool
+	var channelPath string
 
 	flag.BoolVar(&showVersion, "version", false, "display program version and exit")
+	flag.BoolVar(&debug, "debug", false, "enable debug output")
+	flag.BoolVar(&noUdev, "no-udev", false, "do not listen for udeve events")
+	flag.BoolVar(&devMode, "dev-mode", false, "enable developer mode using a NOP server")
+	flag.BoolVar(&grpcTrace, "grpc-trace", false, "trace gRPC calls to log")
+
+	flag.StringVar(&channelPath, "channelPath", "", "user specified channel path (for testing)")
 
 	flag.Parse()
 
@@ -1019,11 +1106,16 @@ func realMain() {
 		pciDeviceMap:   make(map[string]string),
 		deviceWatchers: make(map[string](chan string)),
 		storages:       make(map[string]*sandboxStorage),
+		shutdown:       make(chan bool),
 	}
 
 	if err = s.initLogger(); err != nil {
 		agentLog.WithError(err).Error("failed to setup logger")
 		os.Exit(1)
+	}
+
+	if grpcTrace {
+		s.enableGrpcTrace = true
 	}
 
 	if err = s.setupSignalHandler(); err != nil {
@@ -1038,7 +1130,7 @@ func realMain() {
 
 	// Check for vsock vs serial. This will fill the sandbox structure with
 	// information about the channel.
-	if err = s.initChannel(); err != nil {
+	if err = s.initChannel(channelPath); err != nil {
 		agentLog.WithError(err).Error("failed to setup channels")
 		os.Exit(1)
 	}
@@ -1046,9 +1138,26 @@ func realMain() {
 	// Start gRPC server.
 	s.startGRPC()
 
-	go s.listenToUdevEvents()
+	if !noUdev {
+		go s.listenToUdevEvents()
+	}
 
+	// Wait for the gRPC server to request that it be stopped.
+	agentLog.Infof("DEBUG: realMain: waiting for server stop request")
+	s.waitForServerStopRequest()
+	agentLog.Infof("DEBUG: realMain: waited for server stop request")
+
+	// Stop the gRPC server.
+	agentLog.Infof("DEBUG: realMain: stopping gRPC server")
+	s.gracefulStopGRPC()
+	agentLog.Infof("DEBUG: realMain: stopped gRPC server")
+
+	// Wait for the goroutine that started the server to end
+	agentLog.Infof("DEBUG: realMain: waiting for wg")
 	s.wg.Wait()
+	agentLog.Infof("DEBUG: realMain: waited for wg")
+
+	agentLog.Infof("DEBUG: realMain: DONE")
 }
 
 func main() {

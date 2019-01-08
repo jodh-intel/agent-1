@@ -1300,13 +1300,40 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 	return emptyResp, nil
 }
 
+// requestServerStop asks the goroutine that started the server goroutine
+// to end the gRPC server.
+func (a *agentGRPC) requestServerStop() {
+	agentLog.Infof("DEBUG: requestServerStop: ")
+
+	// Synchronize the caches on the system. This is needed to ensure
+	// there are no pending transactions left before the VM is shut down.
+	syscall.Sync()
+
+	agentLog.Infof("DEBUG: requestServerStop: sending shutdown to server")
+
+	//// Run in a separate thread to ensure the gRPC server thread doesn't
+	//// race with the main thread.
+	//go func() {
+
+	// Inform the caller the server should end
+	a.sandbox.shutdown <- true
+
+	//}()
+
+	agentLog.Infof("DEBUG: requestServerStop: sent shutdown to server")
+}
+
 func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRequest) (*gpb.Empty, error) {
+	agentLog.Infof("DEBUG: DestroySandbox:")
+
 	if a.sandbox.running == false {
 		agentLog.Info("Sandbox not started, this is a no-op")
 		return emptyResp, nil
 	}
 
 	a.sandbox.Lock()
+
+	agentLog.Infof("DEBUG: DestroySandbox: removing %v containers", len(a.sandbox.containers))
 
 	for key, c := range a.sandbox.containers {
 		if err := c.removeContainer(); err != nil {
@@ -1323,20 +1350,29 @@ func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRe
 		}
 		delete(a.sandbox.containers, key)
 	}
+
+	agentLog.Infof("DEBUG: DestroySandbox: calling requestServerStop()")
+	a.requestServerStop()
+	agentLog.Infof("DEBUG: DestroySandbox: called requestServerStop()")
+
 	a.sandbox.Unlock()
 
+	agentLog.Infof("DEBUG: DestroySandbox: removing network")
 	if err := a.sandbox.removeNetwork(); err != nil {
 		return emptyResp, err
 	}
 
+	agentLog.Infof("DEBUG: DestroySandbox: removing mounts")
 	if err := removeMounts(a.sandbox.mounts); err != nil {
 		return emptyResp, err
 	}
 
+	agentLog.Infof("DEBUG: DestroySandbox: removing pidns")
 	if err := a.sandbox.teardownSharedPidNs(); err != nil {
 		return emptyResp, err
 	}
 
+	agentLog.Infof("DEBUG: DestroySandbox: removing shared ns")
 	if err := a.sandbox.unmountSharedNamespaces(); err != nil {
 		return emptyResp, err
 	}

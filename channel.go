@@ -7,9 +7,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +20,7 @@ import (
 
 	"github.com/hashicorp/yamux"
 	"github.com/mdlayher/vsock"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
@@ -36,6 +40,92 @@ type channel interface {
 	teardown() error
 }
 
+type unixDomainSocket struct {
+	// Socket address
+	addr *url.URL
+
+	// Needs to be closed to avoid leakage
+	listener *net.UnixListener
+
+	// Used to determine when the Yamux stream has closed
+	waitCh <-chan struct{}
+}
+
+func (u *unixDomainSocket) setup() error {
+	agentLog.Infof("DEBUG: unixDomainSocket.setup:")
+	return nil
+}
+
+func (u *unixDomainSocket) wait() error {
+	agentLog.Infof("DEBUG: unixDomainSocket.wait:")
+	return nil
+}
+
+func (u *unixDomainSocket) listen() (net.Listener, error) {
+	agentLog.Infof("DEBUG: unixDomainSocket.listen:")
+
+	unixAddr := &net.UnixAddr{
+		Name: u.addr.Path,
+		Net:  u.addr.Scheme,
+	}
+
+	var err error
+
+	u.listener, err = net.ListenUnix(u.addr.Scheme, unixAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := u.listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := setupYamux(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	u.waitCh = session.CloseChan()
+
+	return session, nil
+}
+
+func (u *unixDomainSocket) teardown() error {
+	agentLog.Infof("DEBUG: unixDomainSocket.teardown:")
+
+	err := waitForYamuxStop(u.waitCh)
+	if err != nil {
+		return err
+	}
+
+	return u.listener.Close()
+}
+
+func newUnixDomainSocketChannel(socketPath string) (*unixDomainSocket, error) {
+	if socketPath == "" {
+		return &unixDomainSocket{}, errors.New("empty socket path")
+
+	}
+
+	addr, err := url.Parse(socketPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if addr.Scheme != "" && addr.Scheme != "unix" {
+		return nil, fmt.Errorf("invalid socket address scheme: %q", socketPath)
+	}
+
+	if err := os.Remove(addr.Path); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	return &unixDomainSocket{
+		addr: addr,
+	}, nil
+}
+
 // Creates a new channel to communicate the agent with the proxy or shim.
 // The runtime hot plugs a serial port or a vsock PCI depending of the configuration
 // file and if the host has support for vsocks. newChannel iterates in a loop looking
@@ -44,26 +134,40 @@ type channel interface {
 // can be calculated by using the following operation:
 // (channelExistMaxTries * channelExistWaitTime) / 1000 = timeout in seconds
 // If there are neither vsocks nor serial ports, an error is returned.
-func newChannel() (channel, error) {
+func newChannel(channelPath string) (channel, error) {
 	var serialErr error
-	var serialPath string
 	var vsockErr error
 	var vSockSupported bool
+	var serialPath string
+
+	c, domainErr := newUnixDomainSocketChannel(channelPath)
+	if domainErr == nil {
+		agentLog.WithFields(logrus.Fields{"channel-path": c.addr, "channel-type": "unix"}).Info("Found channel")
+		return c, nil
+	}
 
 	for i := 0; i < channelExistMaxTries; i++ {
 		// check vsock path
 		if _, err := os.Stat(vSockDevPath); err == nil {
+			agentLog.Infof("DEBUG: newChannel: file %v exists", vSockDevPath)
+
 			if vSockSupported, vsockErr = isAFVSockSupportedFunc(); vSockSupported && vsockErr == nil {
+				agentLog.WithField("channel-type", "vsock").Info("Found channel")
 				return &vSockChannel{}, nil
 			}
 		}
 
 		// Check serial port path
 		if serialPath, serialErr = findVirtualSerialPath(serialChannelName); serialErr == nil {
+			agentLog.WithField("channel-type", "serial").Info("Found channel")
 			return &serialChannel{serialPath: serialPath}, nil
 		}
 
 		time.Sleep(channelExistWaitTime)
+	}
+
+	if domainErr != nil {
+		agentLog.WithError(serialErr).Error("Unix Domain socket not found")
 	}
 
 	if serialErr != nil {
@@ -74,7 +178,7 @@ func newChannel() (channel, error) {
 		agentLog.WithError(vsockErr).Error("VSock not found")
 	}
 
-	return nil, fmt.Errorf("Neither vsocks nor serial ports were found")
+	return nil, fmt.Errorf("No available channels found")
 }
 
 type vSockChannel struct {
@@ -187,7 +291,9 @@ func (yw yamuxWriter) Write(bytes []byte) (int, error) {
 	return l, nil
 }
 
-func (c *serialChannel) listen() (net.Listener, error) {
+func setupYamux(conn io.ReadWriteCloser) (*yamux.Session, error) {
+	agentLog.Infof("DEBUG: setupYamux: conn: +%v", conn)
+
 	config := yamux.DefaultConfig()
 	// yamux client runs on the proxy side, sometimes the client is
 	// handling other requests and it's not able to response to the
@@ -198,27 +304,45 @@ func (c *serialChannel) listen() (net.Listener, error) {
 	config.LogOutput = yamuxWriter{}
 
 	// Initialize Yamux server.
-	session, err := yamux.Server(c.serialConn, config)
+	session, err := yamux.Server(conn, config)
 	if err != nil {
 		return nil, err
 	}
+
+	return session, nil
+}
+
+func (c *serialChannel) listen() (net.Listener, error) {
+	session, err := setupYamux(c.serialConn)
+	if err != nil {
+		return nil, err
+	}
+
 	c.waitCh = session.CloseChan()
 
 	return session, nil
 }
 
-func (c *serialChannel) teardown() error {
-	// wait for the session to be fully shutdown first
-	if c.waitCh != nil {
-		t := time.NewTimer(channelCloseTimeout)
-		select {
-		case <-c.waitCh:
-			t.Stop()
-		case <-t.C:
-			return fmt.Errorf("timeout waiting for yamux channel to close")
-		}
+// waitForYamuxStop waits for the session to be fully shutdown
+func waitForYamuxStop(ch <-chan struct{}) error {
+	if ch == nil {
+		return nil
 	}
-	return c.serialConn.Close()
+
+	t := time.NewTimer(channelCloseTimeout)
+	select {
+	case <-ch:
+		t.Stop()
+	case <-t.C:
+		return errors.New("timeout waiting for yamux channel to close")
+	}
+
+	return nil
+
+}
+
+func (c *serialChannel) teardown() error {
+	return waitForYamuxStop(c.waitCh)
 }
 
 func isAFVSockSupported() (bool, error) {

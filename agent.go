@@ -885,7 +885,7 @@ func (s *sandbox) startGRPC() {
 
 			// l is closed when Serve() returns
 			agentLog.Infof("FIXME: startGRPC: calling grpcServer.Serve()")
-			err = grpcServer.Serve(l)
+			err = grpcServer.Serve(l, agentLog)
 			agentLog.Infof("FIXME: startGRPC: grpcServer.Serve() err: %v", err)
 
 			if err != nil {
@@ -909,7 +909,7 @@ func (s *sandbox) startGRPC() {
 
 func (s *sandbox) stopGRPC() {
 	if s.server != nil {
-		s.server.Stop()
+		s.server.Stop(agentLog)
 		s.server = nil
 	}
 }
@@ -925,7 +925,7 @@ func (s *sandbox) gracefulStopGRPC() {
 	agentLog.Infof("DEBUG: gracefulStopGRPC: calling s.server.GracefulStop")
 	// FIXME:
 	////s.server.GracefulStop(agentLog)
-	s.server.GracefulStop()
+	s.server.GracefulStop(agentLog)
 	agentLog.Infof("DEBUG: gracefulStopGRPC: called s.server.GracefulStop")
 
 	s.server = nil

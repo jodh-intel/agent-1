@@ -1,0 +1,16 @@
+[Unit]
+Description=Kata Containers debug console
+
+[Service]
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+StandardInput=tty
+StandardOutput=tty
+PrivateDevices=yes
+Type=simple
+ExecStart=/usr/bin/bash
+Restart=always
+
+# FIXME: testing to avoid having to add "Requires=kata-debug.service"
+# to kata-containers.target
+[Install]
+WantedBy=kata-containers.target

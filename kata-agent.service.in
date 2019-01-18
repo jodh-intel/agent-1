@@ -6,7 +6,7 @@ Wants=kata-containers.target
 [Service]
 # Send agent output to tty to allow capture debug logs
 # from a VM serial port
-StandardOutput=tty
+StandardOutput=journal
 Type=simple
 ExecStart=@bindir@/@kata-agent@
 LimitNOFILE=infinity

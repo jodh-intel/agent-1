@@ -854,56 +854,57 @@ func (s *sandbox) startGRPC() {
 		defer s.wg.Done()
 
 		var err error
-		for {
-			agentLog.Info("agent grpc server starts")
+		//for {
+		agentLog.Info("agent grpc server starts")
 
-			err = s.channel.setup()
-			if err != nil {
-				agentLog.WithError(err).Warn("Failed to setup agent grpc channel")
-				return
-			}
-
-			agentLog.Infof("DEBUG: startGRPC: calling s.channel.wait()")
-			err = s.channel.wait()
-			agentLog.Infof("DEBUG: startGRPC: s.channel.wait() err: %v", err)
-
-			if err != nil {
-				agentLog.WithError(err).Warn("Failed to wait agent grpc channel ready")
-				return
-			}
-
-			var l net.Listener
-
-			agentLog.Infof("DEBUG: startGRPC: calling s.channel.listen()")
-			l, err = s.channel.listen()
-			agentLog.Infof("DEBUG: startGRPC: s.channel.listen() err: %v", err)
-
-			if err != nil {
-				agentLog.WithError(err).Warn("Failed to create agent grpc listener")
-				return
-			}
-
-			// l is closed when Serve() returns
-			agentLog.Infof("DEBUG: startGRPC: calling grpcServer.Serve()")
-			err = grpcServer.Serve(l, agentLog)
-			agentLog.Infof("DEBUG: startGRPC: called grpcServer.Serve(): err: %v", err)
-
-			if err != nil {
-				agentLog.WithError(err).Warn("agent grpc server quits")
-			}
-
-			agentLog.Infof("DEBUG: startGRPC: calling s.channel.teardown()")
-			err = s.channel.teardown()
-			agentLog.Infof("DEBUG: startGRPC: s.channel.teardown() err: %v", err)
-
-			if err != nil {
-				agentLog.WithError(err).Warn("agent grpc channel teardown failed")
-			}
-
-			if s.dead {
-				break
-			}
+		err = s.channel.setup()
+		if err != nil {
+			agentLog.WithError(err).Warn("Failed to setup agent grpc channel")
+			return
 		}
+
+		agentLog.Infof("DEBUG: startGRPC: calling s.channel.wait()")
+		err = s.channel.wait()
+		agentLog.Infof("DEBUG: startGRPC: s.channel.wait() err: %v", err)
+
+		if err != nil {
+			agentLog.WithError(err).Warn("Failed to wait agent grpc channel ready")
+			return
+		}
+
+		var l net.Listener
+
+		agentLog.Infof("DEBUG: startGRPC: calling s.channel.listen()")
+		l, err = s.channel.listen()
+		agentLog.Infof("DEBUG: startGRPC: s.channel.listen() err: %v", err)
+
+		if err != nil {
+			agentLog.WithError(err).Warn("Failed to create agent grpc listener")
+			return
+		}
+
+		// l is closed when Serve() returns
+		agentLog.Infof("DEBUG: startGRPC: calling grpcServer.Serve()")
+		err = grpcServer.Serve(l, agentLog)
+		agentLog.Infof("DEBUG: startGRPC: called grpcServer.Serve(): err: %v", err)
+
+		if err != nil {
+			agentLog.WithError(err).Warn("agent grpc server quits")
+		}
+
+		agentLog.Infof("DEBUG: startGRPC: calling s.channel.teardown()")
+		err = s.channel.teardown()
+		agentLog.Infof("DEBUG: startGRPC: s.channel.teardown() err: %v", err)
+
+		if err != nil {
+			agentLog.WithError(err).Warn("agent grpc channel teardown failed")
+		}
+
+		if s.dead {
+			agentLog.Infof("DEBUG: startGRPC: dead so returning")
+			return
+		}
+		//}
 	}()
 }
 

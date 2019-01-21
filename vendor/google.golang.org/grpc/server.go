@@ -535,15 +535,17 @@ func (s *Server) Serve(lis net.Listener, agentLog *logrus.Entry) error {
 	var tempDelay time.Duration // how long to sleep on accept failure
 
 	for {
-		agentLog.Infof("DEBUG: grpc.Serve: forever loop: top")
+		agentLog.Infof("DEBUG: grpc.Serve: forever loop: 1: top")
 
 		rawConn, err := lis.Accept()
-		agentLog.Infof("DEBUG: grpc.Serve: forever loop: lis.Accept() returned rawConn: %+v, err: %v", rawConn, err)
+		agentLog.Infof("DEBUG: grpc.Serve: forever loop: 2: lis.Accept() returned rawConn: %+v, err: %v", rawConn, err)
 
 		if err != nil {
 			if ne, ok := err.(interface {
 				Temporary() bool
 			}); ok && ne.Temporary() {
+				agentLog.Infof("DEBUG: grpc.Serve: 3: forever loop: Temporary() error: @@@@@")
+
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
 				} else {
@@ -552,31 +554,44 @@ func (s *Server) Serve(lis net.Listener, agentLog *logrus.Entry) error {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
+
+				agentLog.Infof("DEBUG: grpc.Serve: forever loop: 4: Temporary() error: locking mu")
 				s.mu.Lock()
+				agentLog.Infof("DEBUG: grpc.Serve: forever loop: 5: Temporary() error: locked mu")
+
 				s.printf("Accept error: %v; retrying in %v", err, tempDelay)
+				agentLog.Infof("DEBUG: grpc.Serve: forever loop: 6: Temporary() error: locking mu")
 				s.mu.Unlock()
+				agentLog.Infof("DEBUG: grpc.Serve: forever loop: 7: Temporary() error: locked mu")
+
 				timer := time.NewTimer(tempDelay)
 				select {
 				case <-timer.C:
 				case <-s.quit:
 					timer.Stop()
-					agentLog.Infof("DEBUG: grpc.Serve: forever loop: returning nil (1st select <-s.quit)")
+					agentLog.Infof("DEBUG: grpc.Serve: forever loop: 8: returning nil (1st select <-s.quit)")
 					return nil
 				}
 				continue
 			}
+
+			agentLog.Infof("DEBUG: grpc.Serve: forever loop: 9: locking mu")
 			s.mu.Lock()
+			agentLog.Infof("DEBUG: grpc.Serve: forever loop: 10: locked mu")
+
 			s.printf("done serving; Accept = %v", err)
+			agentLog.Infof("DEBUG: grpc.Serve: forever loop: 11: unlocking mu")
 			s.mu.Unlock()
+			agentLog.Infof("DEBUG: grpc.Serve: forever loop: 12: unlocked mu")
 
 			select {
 			case <-s.quit:
 				// XXX: this is where the non-vsock code returns!!
-				agentLog.Infof("DEBUG: grpc.Serve: forever loop: returning nil (2nd select <-s.quit)")
+				agentLog.Infof("DEBUG: grpc.Serve: forever loop: 13: returning nil (2nd select <-s.quit)")
 				return nil
 			default:
 			}
-			agentLog.Infof("DEBUG: grpc.Serve: forever loop: returning err %v", err)
+			agentLog.Infof("DEBUG: grpc.Serve: forever loop: 14: returning err %v", err)
 			return err
 		}
 		tempDelay = 0
@@ -589,62 +604,86 @@ func (s *Server) Serve(lis net.Listener, agentLog *logrus.Entry) error {
 		//agentLog.Infof("DEBUG: grpc.Serve: wg: %+v: for loop: calling Add(1)", s.serveWG)
 		//s.serveWG.Add(1)
 		//agentLog.Infof("DEBUG: grpc.Serve: wg: %+v: for loop: called Add(1)", s.serveWG)
-		s.wgAdd(agentLog, "bottom")
+		s.wgAdd(agentLog, "forever loop: bottom: 15")
 
 		go func() {
-			agentLog.Infof("DEBUG: grpc.Serve: wg: %+v: for loop: goroutine: calling handleRawConn()", s.serveWG)
+			agentLog.Infof("DEBUG: grpc.Serve: forever loop: 16: wg: %+v: for loop: goroutine: calling handleRawConn()", s.serveWG)
 			s.handleRawConn(rawConn, agentLog)
-			agentLog.Infof("DEBUG: grpc.Serve: wg: %+v: for loop: goroutine: called handleRawConn()", s.serveWG)
+			agentLog.Infof("DEBUG: grpc.Serve: forever loop: 17: wg: %+v: for loop: goroutine: called handleRawConn()", s.serveWG)
 
 			//agentLog.Infof("DEBUG: grpc.Serve: wg: %+v: for loop: goroutine: calling Done()", s.serveWG)
 			//s.serveWG.Done()
 			//agentLog.Infof("DEBUG: grpc.Serve: wg: %+v: for loop: goroutine: called Done()", s.serveWG)
-			s.wgDone(agentLog, "bottom")
+			s.wgDone(agentLog, "forever loop: bottom: 18")
 		}()
 
-		agentLog.Infof("DEBUG: grpc.Serve: forever loop: bottom")
+		agentLog.Infof("DEBUG: grpc.Serve: forever loop: 19: bottom")
 	}
 }
 
 // handleRawConn forks a goroutine to handle a just-accepted connection that
 // has not had any I/O performed on it yet.
 func (s *Server) handleRawConn(rawConn net.Conn, agentLog *logrus.Entry) {
-	agentLog.Infof("DEBUG: grpc.handleRawConn:")
+	agentLog.Infof("DEBUG: grpc.handleRawConn: 1")
 	rawConn.SetDeadline(time.Now().Add(s.opts.connectionTimeout))
 	conn, authInfo, err := s.useTransportAuthenticator(rawConn)
-	agentLog.Infof("DEBUG: grpc.handleRawConn: useTransportAuthenticator err: %v", err)
+	agentLog.Infof("DEBUG: grpc.handleRawConn: 2: useTransportAuthenticator: conn: %v, authInfo: %v, err: %v", conn, authInfo, err)
 	if err != nil {
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 3: locking mu")
 		s.mu.Lock()
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 4: locked mu")
+
 		s.errorf("ServerHandshake(%q) failed: %v", rawConn.RemoteAddr(), err)
+
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 5: unlocking mu")
 		s.mu.Unlock()
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 6: unlocked mu")
+
 		grpclog.Warningf("grpc: Server.Serve failed to complete security handshake from %q: %v", rawConn.RemoteAddr(), err)
 		// If serverHandshake returns ErrConnDispatched, keep rawConn open.
 		if err != credentials.ErrConnDispatched {
+			agentLog.Infof("DEBUG: grpc.handleRawConn: 7: closing rawConn")
 			rawConn.Close()
+			agentLog.Infof("DEBUG: grpc.handleRawConn: 8: closed rawConn")
 		}
 		rawConn.SetDeadline(time.Time{})
-		agentLog.Infof("DEBUG: grpc.handleRawConn: return 1")
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 9: return 1")
 		return
 	}
 
+	agentLog.Infof("DEBUG: grpc.handleRawConn: 10: locking mu: 2")
 	s.mu.Lock()
+	agentLog.Infof("DEBUG: grpc.handleRawConn: 11: locked mu: 2")
+
 	if s.conns == nil {
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 12: s.conns == nil: unlocking mu: 3")
 		s.mu.Unlock()
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 13: s.conns == nil: unlocked mu: 3")
+
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 14: s.conns == nil: closing conn")
 		conn.Close()
-		agentLog.Infof("DEBUG: grpc.handleRawConn: return 2")
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 15: s.conns == nil: closed conn")
+
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 16: s.conns == nil: return 2")
 		return
 	}
+
+	agentLog.Infof("DEBUG: grpc.handleRawConn: 17: unlocking mu")
 	s.mu.Unlock()
+	agentLog.Infof("DEBUG: grpc.handleRawConn: 18: unlocked mu")
 
 	var serve func()
 	c := conn.(io.Closer)
 	if s.opts.useHandlerImpl {
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 19: s.opts.useHandlerImpl==true")
 		serve = func() { s.serveUsingHandler(conn) }
 	} else {
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 20: s.opts.useHandlerImpl==false")
 		// Finish handshaking (HTTP2)
 		st := s.newHTTP2Transport(conn, authInfo)
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 21: http2 st: %+v", st)
 		if st == nil {
-			agentLog.Infof("DEBUG: grpc.handleRawConn: return 3")
+			agentLog.Infof("DEBUG: grpc.handleRawConn: 22: return 3")
 			return
 		}
 		c = st
@@ -653,20 +692,20 @@ func (s *Server) handleRawConn(rawConn net.Conn, agentLog *logrus.Entry) {
 
 	rawConn.SetDeadline(time.Time{})
 	if !s.addConn(c) {
-		agentLog.Infof("DEBUG: grpc.handleRawConn: return 4")
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 23: return 4")
 		return
 	}
 	go func() {
-		agentLog.Infof("DEBUG: grpc.handleRawConn: goroutine: calling s.serve()")
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 24: goroutine: calling s.serve()")
 		serve()
-		agentLog.Infof("DEBUG: grpc.handleRawConn: goroutine: called s.serve()")
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 25: goroutine: called s.serve()")
 
-		agentLog.Infof("DEBUG: grpc.handleRawConn: goroutine: calling s.removeConn()")
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 26: goroutine: calling s.removeConn()")
 		s.removeConn(c)
-		agentLog.Infof("DEBUG: grpc.handleRawConn: goroutine: called s.removeConn()")
+		agentLog.Infof("DEBUG: grpc.handleRawConn: 27: goroutine: called s.removeConn()")
 	}()
 
-	agentLog.Infof("DEBUG: grpc.handleRawConn: finished addConn()")
+	agentLog.Infof("DEBUG: grpc.handleRawConn: 28: finished addConn()")
 }
 
 // newHTTP2Transport sets up a http/2 transport (using the
@@ -1345,9 +1384,9 @@ func (s *Server) GracefulStop(agentLog *logrus.Entry) {
 	agentLog.Infof("DEBUG: Server.GracefulStop: Locked mu: 1")
 
 	if s.conns == nil {
-		agentLog.Infof("DEBUG: Server.GracefulStop: s.conns == nil: unlocking me")
+		agentLog.Infof("DEBUG: Server.GracefulStop: s.conns == nil: unlocking mu")
 		s.mu.Unlock()
-		agentLog.Infof("DEBUG: Server.GracefulStop: s.conns == nil: unlocked me")
+		agentLog.Infof("DEBUG: Server.GracefulStop: s.conns == nil: unlocked mu")
 
 		agentLog.Infof("DEBUG: Server.GracefulStop: s.conns == nil: returning")
 		return

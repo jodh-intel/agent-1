@@ -170,13 +170,11 @@ func makeRequests(client *kataClient) error {
 	//------------------------------
 	// destroy sandbox (aka server shutdown!)
 
-	/*
-		destroySandboxReq := &grpc.DestroySandboxRequest{}
-		_, err := client.sendReq(destroySandboxReq)
-		if err != nil {
-			return err
-		}
-	*/
+	destroySandboxReq := &grpc.DestroySandboxRequest{}
+	_, err = client.sendReq(destroySandboxReq)
+	if err != nil {
+		return err
+	}
 
 	//------------------------------
 	// create sandbox

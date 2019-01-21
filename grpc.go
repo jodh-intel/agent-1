@@ -1326,6 +1326,11 @@ func (a *agentGRPC) requestServerStop() {
 func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRequest) (*gpb.Empty, error) {
 	agentLog.Infof("DEBUG: DestroySandbox:")
 
+	// FIXME: moved to start of function for testing only!
+	agentLog.Infof("DEBUG: DestroySandbox: calling requestServerStop()")
+	a.requestServerStop()
+	agentLog.Infof("DEBUG: DestroySandbox: called requestServerStop()")
+
 	if a.sandbox.running == false {
 		agentLog.Info("Sandbox not started, this is a no-op")
 		return emptyResp, nil
@@ -1351,9 +1356,9 @@ func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRe
 		delete(a.sandbox.containers, key)
 	}
 
-	agentLog.Infof("DEBUG: DestroySandbox: calling requestServerStop()")
-	a.requestServerStop()
-	agentLog.Infof("DEBUG: DestroySandbox: called requestServerStop()")
+	//agentLog.Infof("DEBUG: DestroySandbox: calling requestServerStop()")
+	//a.requestServerStop()
+	//agentLog.Infof("DEBUG: DestroySandbox: called requestServerStop()")
 
 	a.sandbox.Unlock()
 

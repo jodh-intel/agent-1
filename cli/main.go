@@ -20,7 +20,9 @@ import (
 )
 
 const (
-	name = "kata-agent-ctl"
+	name                 = "kata-agent-ctl"
+	VHostVSockDevicePath = "/dev/vhost-vsock"
+	vsockSocketScheme    = "vsock"
 )
 
 var (
@@ -260,12 +262,31 @@ func realMain() error {
 	}
 
 	ctx := context.Background()
-	client, err := newKataClient(ctx, logger, agentAddress, keepAlive, enableYamux)
+
+	addr := resolveAgentAddress(agentAddress)
+
+	logger.Debugf("using agent address %q", addr)
+
+	client, err := newKataClient(ctx, logger, addr, keepAlive, enableYamux)
 	if err != nil {
 		return err
 	}
 
 	return makeRequests(client)
+}
+
+func resolveAgentAddress(addr string) string {
+	if addr != "" {
+		return addr
+	}
+
+	// FIXME:
+	contextID := 3
+	port := 1024
+
+	vsockAddr := fmt.Sprintf("%s://%d:%d", vsockSocketScheme, contextID, port)
+
+	return vsockAddr
 }
 
 func main() {

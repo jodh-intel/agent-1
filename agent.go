@@ -825,7 +825,7 @@ func (s *sandbox) startGRPC() {
 	}
 
 	if devMode {
-		agentLog.Infof("FIXME: using &nopAgentGRPC")
+		agentLog.Infof("DEBUG: using &nopAgentGRPC")
 
 		grpcImpl = nopGRPCImpl
 		healthImpl = nopGRPCImpl
@@ -863,9 +863,9 @@ func (s *sandbox) startGRPC() {
 				return
 			}
 
-			agentLog.Infof("FIXME: startGRPC: calling s.channel.wait()")
+			agentLog.Infof("DEBUG: startGRPC: calling s.channel.wait()")
 			err = s.channel.wait()
-			agentLog.Infof("FIXME: startGRPC: s.channel.wait() err: %v", err)
+			agentLog.Infof("DEBUG: startGRPC: s.channel.wait() err: %v", err)
 
 			if err != nil {
 				agentLog.WithError(err).Warn("Failed to wait agent grpc channel ready")
@@ -874,9 +874,9 @@ func (s *sandbox) startGRPC() {
 
 			var l net.Listener
 
-			agentLog.Infof("FIXME: startGRPC: calling s.channel.listen()")
+			agentLog.Infof("DEBUG: startGRPC: calling s.channel.listen()")
 			l, err = s.channel.listen()
-			agentLog.Infof("FIXME: startGRPC: s.channel.listen() err: %v", err)
+			agentLog.Infof("DEBUG: startGRPC: s.channel.listen() err: %v", err)
 
 			if err != nil {
 				agentLog.WithError(err).Warn("Failed to create agent grpc listener")
@@ -884,17 +884,17 @@ func (s *sandbox) startGRPC() {
 			}
 
 			// l is closed when Serve() returns
-			agentLog.Infof("FIXME: startGRPC: calling grpcServer.Serve()")
+			agentLog.Infof("DEBUG: startGRPC: calling grpcServer.Serve()")
 			err = grpcServer.Serve(l, agentLog)
-			agentLog.Infof("FIXME: startGRPC: grpcServer.Serve() err: %v", err)
+			agentLog.Infof("DEBUG: startGRPC: called grpcServer.Serve(): err: %v", err)
 
 			if err != nil {
 				agentLog.WithError(err).Warn("agent grpc server quits")
 			}
 
-			agentLog.Infof("FIXME: startGRPC: calling s.channel.teardown()")
+			agentLog.Infof("DEBUG: startGRPC: calling s.channel.teardown()")
 			err = s.channel.teardown()
-			agentLog.Infof("FIXME: startGRPC: s.channel.teardown() err: %v", err)
+			agentLog.Infof("DEBUG: startGRPC: s.channel.teardown() err: %v", err)
 
 			if err != nil {
 				agentLog.WithError(err).Warn("agent grpc channel teardown failed")

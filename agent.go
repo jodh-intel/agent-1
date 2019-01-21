@@ -1160,8 +1160,8 @@ func realMain() {
 
 	// Stop the gRPC server.
 	agentLog.Infof("DEBUG: realMain: stopping gRPC server")
-	//s.gracefulStopGRPC()
-	s.stopGRPC()
+	s.gracefulStopGRPC()
+	//s.stopGRPC()
 	agentLog.Infof("DEBUG: realMain: stopped gRPC server")
 
 	// Wait for the goroutine that started the server to end

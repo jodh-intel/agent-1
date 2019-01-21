@@ -537,7 +537,7 @@ func (s *Server) Serve(lis net.Listener, agentLog *logrus.Entry) error {
 	for {
 		agentLog.Infof("DEBUG: grpc.Serve: forever loop: 1: top")
 
-		agentLog.Infof("DEBUG: grpc.Serve: forever loop: 1.5: calling list.Accept():")
+		agentLog.Infof("DEBUG: grpc.Serve: forever loop: 1.5: calling lis.Accept():")
 		rawConn, err := lis.Accept()
 		agentLog.Infof("DEBUG: grpc.Serve: forever loop: 2: called lis.Accept(): rawConn: %+v, err: %v", rawConn, err)
 

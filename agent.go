@@ -908,6 +908,8 @@ func (s *sandbox) startGRPC() {
 
 		agentLog.Infof("DEBUG: startGRPC: goroutine finished")
 	}()
+
+	agentLog.Infof("DEBUG: startGRPC: returning")
 }
 
 func (s *sandbox) stopGRPC() {

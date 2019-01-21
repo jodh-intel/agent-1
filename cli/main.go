@@ -154,8 +154,6 @@ func makeRequests(client *kataClient) error {
 
 	logger.Infof("details: %+v", guestDetailsResp)
 
-	return err
-
 	//------------------------------
 
 	/*
@@ -168,7 +166,7 @@ func makeRequests(client *kataClient) error {
 	*/
 
 	//------------------------------
-	// destroy sandbox (aka server shutdown!)
+	// XXX: destroy sandbox (aka server shutdown!)
 
 	destroySandboxReq := &grpc.DestroySandboxRequest{}
 	_, err = client.sendReq(destroySandboxReq)

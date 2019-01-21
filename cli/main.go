@@ -42,13 +42,13 @@ func init() {
 		"pid":  os.Getpid(),
 	})
 
-	logger.Level = logrus.DebugLevel
-
 	logger.Logger.Formatter = &logrus.TextFormatter{
 		DisableColors:   true,
 		FullTimestamp:   true,
 		TimestampFormat: time.RFC3339Nano,
 	}
+
+	logger.Logger.Level = logrus.DebugLevel
 }
 
 func usage() {
@@ -247,7 +247,7 @@ func realMain() error {
 
 	flag.BoolVar(&debug, "debug", false, "enable debug output")
 	flag.BoolVar(&keepAlive, "keep-alive", false, "use a single agent connection")
-	flag.BoolVar(&keepAlive, "enable-yamux", false, "use Yamux comms")
+	flag.BoolVar(&enableYamux, "enable-yamux", false, "use Yamux comms")
 	flag.BoolVar(&showVersion, "version", false, "display program version and exit")
 	flag.IntVar(&grpcTimeoutSecs, "timeout", grpcTimeoutSecs, "set gRPC timeout (seconds)")
 	flag.StringVar(&agentAddress, "agentAddress", "", "address to connect to agent")
@@ -265,7 +265,15 @@ func realMain() error {
 
 	addr := resolveAgentAddress(agentAddress)
 
-	logger.Debugf("using agent address %q", addr)
+	logger.WithFields(logrus.Fields{
+		"debug":             debug,
+		"keep-alive":        keepAlive,
+		"enable-yamux":      enableYamux,
+		"grpc-timeout-secs": grpcTimeoutSecs,
+		"agent-address":     agentAddress,
+	}).Debug("options")
+
+	logger.WithField("resolved-agent-address", addr).Debug("resolved agent address")
 
 	client, err := newKataClient(ctx, logger, addr, keepAlive, enableYamux)
 	if err != nil {

@@ -913,10 +913,16 @@ func (s *sandbox) startGRPC() {
 }
 
 func (s *sandbox) stopGRPC() {
+	agentLog.Infof("DEBUG: stopGRPC: s.server: %v", s.server)
+
 	if s.server != nil {
+		agentLog.Infof("DEBUG: stopGRPC: calling s.server.Stop")
 		s.server.Stop(agentLog)
+		agentLog.Infof("DEBUG: stopGRPC: called s.server.Stop")
 		s.server = nil
 	}
+
+	agentLog.Infof("DEBUG: stopGRPC: returning")
 }
 
 func (s *sandbox) gracefulStopGRPC() {
@@ -1154,7 +1160,8 @@ func realMain() {
 
 	// Stop the gRPC server.
 	agentLog.Infof("DEBUG: realMain: stopping gRPC server")
-	s.gracefulStopGRPC()
+	//s.gracefulStopGRPC()
+	s.stopGRPC()
 	agentLog.Infof("DEBUG: realMain: stopped gRPC server")
 
 	// Wait for the goroutine that started the server to end

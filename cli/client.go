@@ -74,9 +74,9 @@ func (c *kataClient) connect() error {
 		return fmt.Errorf("BUG: found existing connection bug keepAlive not set")
 	}
 
-	enableYamux := true
-
-	c.conn, err = kataclient.NewAgentClient(c.ctx, c.address, enableYamux)
+	c.conn, err = kataclient.NewAgentClient(c.ctx,
+		c.address,
+		c.enableYamux)
 	if err != nil {
 		return err
 	}

@@ -905,6 +905,8 @@ func (s *sandbox) startGRPC() {
 			return
 		}
 		//}
+
+		agentLog.Infof("DEBUG: startGRPC: goroutine finished")
 	}()
 }
 

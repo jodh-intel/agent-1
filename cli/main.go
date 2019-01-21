@@ -144,21 +144,39 @@ func callSafeRoutines(client *kataClient) error {
 }
 
 func makeRequests(client *kataClient) error {
-	for i := 0; i < 1024; i++ {
-		err := callSafeRoutines(client)
-		if err != nil {
-			return err
-		}
+	guestDetailsReq := &grpc.GuestDetailsRequest{
+		MemBlockSize: true,
 	}
+
+	logger.Infof("DEBUG: calling client.getGuestDetails")
+	guestDetailsResp, err := client.getGuestDetails(guestDetailsReq)
+	logger.Infof("DEBUG: called client.getGuestDetails")
+
+	logger.Infof("details: %+v", guestDetailsResp)
+
+	return err
+
+	//------------------------------
+
+	/*
+		for i := 0; i < 1024; i++ {
+			err := callSafeRoutines(client)
+			if err != nil {
+				return err
+			}
+		}
+	*/
 
 	//------------------------------
 	// destroy sandbox (aka server shutdown!)
 
-	destroySandboxReq := &grpc.DestroySandboxRequest{}
-	_, err := client.sendReq(destroySandboxReq)
-	if err != nil {
-		return err
-	}
+	/*
+		destroySandboxReq := &grpc.DestroySandboxRequest{}
+		_, err := client.sendReq(destroySandboxReq)
+		if err != nil {
+			return err
+		}
+	*/
 
 	//------------------------------
 	// create sandbox

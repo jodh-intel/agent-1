@@ -236,6 +236,10 @@ func makeRequests(client *kataClient) error {
 
 	//------------------------------
 
+	//logger.Infof("sleeping")
+	//time.Sleep(time.Second * 1)
+	//logger.Infof("slept")
+
 	return nil
 }
 

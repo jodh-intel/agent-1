@@ -1439,6 +1439,8 @@ func (a *agentGRPC) ReseedRandomDev(ctx context.Context, req *pb.ReseedRandomDev
 }
 
 func (a *agentGRPC) GetGuestDetails(ctx context.Context, req *pb.GuestDetailsRequest) (*pb.GuestDetailsResponse, error) {
+	agentLog.Infof("DEBUG: GetGuestDetails:")
+
 	var details pb.GuestDetailsResponse
 	if req.MemBlockSize {
 		data, err := ioutil.ReadFile(sysfsMemoryBlockSizePath)

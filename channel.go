@@ -141,9 +141,12 @@ func newChannel(channelPath string) (channel, error) {
 	var serialPath string
 
 	c, domainErr := newUnixDomainSocketChannel(channelPath)
+
 	if domainErr == nil {
 		agentLog.WithFields(logrus.Fields{"channel-path": c.addr, "channel-type": "unix"}).Info("Found channel")
 		return c, nil
+	} else {
+		agentLog.WithError(domainErr).WithField("invalid-channel-path", channelPath).Info("failed to create unix domain channel")
 	}
 
 	for i := 0; i < channelExistMaxTries; i++ {

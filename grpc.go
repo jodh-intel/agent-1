@@ -1327,9 +1327,13 @@ func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRe
 	agentLog.Infof("DEBUG: DestroySandbox:")
 
 	// FIXME: moved to start of function for testing only!
-	agentLog.Infof("DEBUG: DestroySandbox: calling requestServerStop()")
-	a.requestServerStop()
-	agentLog.Infof("DEBUG: DestroySandbox: called requestServerStop()")
+	if true {
+		agentLog.Infof("DEBUG: DestroySandbox: calling requestServerStop()")
+		a.requestServerStop()
+		agentLog.Infof("DEBUG: DestroySandbox: called requestServerStop()")
+
+		return emptyResp, nil
+	}
 
 	if a.sandbox.running == false {
 		agentLog.Info("Sandbox not started, this is a no-op")

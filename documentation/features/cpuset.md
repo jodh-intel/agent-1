@@ -44,7 +44,7 @@ Here, the container is limited to 2 CPUs and can be scheduled on CPU 2, 3, and
 4.
 
 The Kata runtime only hotplugs 2 CPUs, making it impossible to request that the
-guest kernel schedules the workload on vcpu 3 and 4.
+guest kernel schedules the workload on VCPU 3 and 4.
 
 ## cpuset best effort application.
 
